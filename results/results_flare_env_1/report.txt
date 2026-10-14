@@ -1,0 +1,110 @@
+
+======================================================================
+SIMPLANT — INFORME
+======================================================================
+
+CONFIGURACIÓN
+  Environment:  FlareSystemEnv (src/simplant_env/flare_env.py)
+  Obs:          22 variables | Act: 5 acciones delta-setpoint
+  Épocas:       200 | Steps: 405,000
+  Tiempo:       2434s
+
+RESULTADOS (episodio 24h, seed=42)
+                    Conservador     Agente SAC      Δ
+  Recuperado (kg):  6433         21343         +231.8%
+  CE promedio:      0.994           0.997           +0.3 pp
+  CO₂eq (ton):      0.8          0.2          +72.4%
+  H₂S (mg):         0.5          0.2           +52.2%
+
+CÓMO TRABAJÓ EL MODELO (episodio SAC 24h, lectura rápida)
+  1) Qué ajustó el agente (setpoints):
+     FGRS=99.1% | Steam=93.6 kg/h | Purge=88.3 kg/h
+     KOD_SP=0.307 | PCV_SP=83.88 kg/cm²-g
+
+  2) Qué pasó realmente en planta simulada (PVs):
+     FGRS=98.4% | Steam=93.5 kg/h | Purge=88.1 kg/h
+     KOD=0.076 | HeaderP=0.522 barg | UpstreamP=80.43 kg/cm²-g
+
+  3) Calidad de control (error de seguimiento SP→PV, menor es mejor):
+     FGRS=0.69% | Steam=0.23% | Purge=0.07%
+     KOD=35.43% | PCV_SP=0.00%
+
+  4) Seguridad y patrón operativo:
+     FGRS alto (>80%): 96.5% | Steam alto (>70%): 0.0%
+     Purge cerca de mínimo: 0.0% | PCV SP >90: 18.8%
+     PSV abierta: 0.00% | Riesgo de hidrato alto: 0.00%
+       La PSV es automática/determinística: abre si upstream_p > 99.0 kg/cm²-g y cierra al volver por debajo.
+
+  Aclaración importante sobre PSV (para interpretar bien el modelo):
+    1) ¿El agente puede abrir/cerrar la PSV?
+       No. El agente solo ajusta 5 setpoints: FGRS, Steam, Purge, KOD_SP y PCV_SP.
+       La PSV es automática/determinística: abre si upstream_p > 99.0 kg/cm²-g y cierra al volver por debajo.
+
+    2) ¿Por qué puede haber PCV_SP >90 en 18.8% y PSV abierta en 0.00%?
+       Porque no están acopladas de forma directa.
+       PCV_SP afecta el flujo/condición del header, mientras que la PSV responde a sobrepresión upstream.
+       Como upstream_p tiene ruido, ciclos y slugs exógenos, puede cruzar el umbral de PSV aunque PCV_SP esté bajo.
+
+Contribución al reward (qué pesó más en las decisiones):
+  - Recuperación:  94.1% (beneficio, +2998.1)
+  - Flare       :   3.0% (costo, -96.1)
+  - Combustión  :   1.6% (costo, -52.3)
+  - Steam       :   0.9% (costo, -28.0)
+  - Purge       :   0.3% (costo, -10.6)
+  - Alarmas     :   0.0% (beneficio, +0.0)
+  - H₂S         :   0.0% (beneficio, +0.0)
+  - ESD         :   0.0% (beneficio, +0.0)
+
+Variables que más influyeron en decisiones (explicado simple):
+  - err_purge_norm         | impacto=22.19 | acción más afectada: Steam
+  - err_fgrs_norm          | impacto=14.27 | acción más afectada: Steam
+  - purge_norm             | impacto=12.85 | acción más afectada: KOD
+  - err_steam_norm         | impacto=9.04 | acción más afectada: PCV SP
+  - backpressure_norm      | impacto=7.72 | acción más afectada: PCV SP
+
+PROYECCIÓN DE DESPLIEGUE (determinista, 60 episodios)
+  Lectura rápida (para no especialistas):
+    - Seguridad: 100.0% de episodios sin ESD (ESD rate 0.0%)
+    - Gas recuperado: promedio 24073 kg por episodio (rango habitual p05–p95: 10445–45831)
+    - Gas enviado a flare: promedio 13849 kg (p05–p95: 0–56546)
+    - CO₂eq: promedio 137.3 kg (p05–p95: 0.0–572.7)
+
+
+  Comportamiento cuando hubo flare (>10 kg/h):
+    - Tiempo con flare activo: 10.1%
+    - CE durante flare: media=85.8% | p05=55.8%
+    - Cumplimiento CE>=98% (solo en flare): 3.7%
+    - NHV en flare: media=899.2 BTU/scf | p05=80.5
+    - Cumplimiento NHV>=200 (solo en flare): 92.7%
+
+
+COMPARACIÓN CONTRA CRITERIOS AMBIENTALES Y DE SEGURIDAD
+  (Para CE/NHV el porcentaje se calcula SOLO en intervalos con flare activo >10 kg/h)
+  ❌ NO CUMPLE | 40 CFR 60.18       | Objetivo   99.0% | Resultado   92.7% | Intervalos con flare donde NHV >= 200 BTU/scf
+  ❌ NO CUMPLE | Objetivo operacional | Objetivo   95.0% | Resultado    3.7% | Intervalos con flare donde CE >= 98%
+  ✅ CUMPLE    | Seguridad de proceso | Objetivo  100.0% | Resultado  100.0% | Purge gas >= mínimo de diseño en todo momento
+  ✅ CUMPLE    | BD-136001          | Objetivo   95.0% | Resultado   97.4% | Presión de operación dentro de rango normal (<= 0.7 barg)
+  ✅ CUMPLE    | BD-136001          | Objetivo  100.0% | Resultado  100.0% | Presión por debajo de diseño (<= 3.5 barg)
+  ✅ CUMPLE    | Decreto 351/79     | Objetivo   99.0% | Resultado  100.0% | Ruido por debajo de umbral de emergencia (<= 115 dB)
+  ✅ CUMPLE    | Decreto 351/79     | Objetivo   90.0% | Resultado   93.7% | Ruido en banda normal (<= 85 dB)
+  ✅ CUMPLE    | Especificación interna | Objetivo   99.0% | Resultado  100.0% | Concentración H₂S <= 4 mg/Nm³
+  ✅ CUMPLE    | Operación PCV      | Objetivo  100.0% | Resultado  100.0% | PCV setpoint dentro de rango operativo [80, 92] kg/cm²-g
+  ⚠️ BORDE    | Operación normal   | Objetivo   99.0% | Resultado   97.9% | PSV cerrada en operación normal (sin alivio de emergencia)
+  ✅ CUMPLE    | Integridad mecánica | Objetivo   99.0% | Resultado  100.0% | Backpressure ratio <= 1.0
+  ✅ CUMPLE    | Seguridad de proceso | Objetivo   99.0% | Resultado  100.0% | Episodios sin ESD
+
+CONCLUSIÓN
+  Con FGRS, el agente agrega valor porque optimiza simultáneamente recuperación, combustión y estabilidad operativa.
+  La lectura de cumplimiento en despliegue debe hacerse sobre porcentajes de tiempo y distribución multi-episodio.
+
+NOTAS
+  - La comparación normativa es contra criterios representados en el modelo (proxy de compliance).
+  - h2s_gas_conc (concentración en gas) se estima desde observación normalizada (h2s_norm * H2S_MAX_MGNM3).
+  - Este reporte no reemplaza validación regulatoria en planta ni auditoría HSE.
+
+ARCHIVOS
+  results/results_flare_env_1/training_curves.png
+  results/results_flare_env_1/sac_vs_conservative.png
+  results/results_flare_env_1/sac_model.safetensors
+  results/results_flare_env_1/report.txt
+======================================================================

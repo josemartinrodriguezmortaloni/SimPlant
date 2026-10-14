@@ -1,0 +1,96 @@
+
+======================================================================
+SIMPLANT — INFORME
+======================================================================
+
+CONFIGURACIÓN
+  Environment:  FlareSystemEnv que se encuentra en el archivo flare_env2.py de simplant_env
+  Obs:          19 variables | Act: 3 acciones delta-setpoint
+  Épocas:       200 | Steps: 405,000
+  Tiempo:       3409s
+
+RESULTADOS (episodio 24h, seed=42)
+                    Conservador     Agente SAC      Δ
+  CE promedio:      0.785           0.936           +15.2 pp
+  CO₂eq (ton):     1632.9          181.1          +88.9%
+  H₂S (mg):        0.0          0.0           +0.0%
+
+CÓMO TRABAJÓ EL MODELO (episodio SAC 24h)
+  Setpoints promedio:
+    Steam=98.8 kg/h | Purge=268.1 kg/h |
+    KOD_level_SP=0.633 frac
+
+  Variables ejecutadas (PV) promedio:
+    Steam=98.6 kg/h | Purge=267.8 kg/h |
+    KOD_level=0.081 frac
+
+  Señales upstream/PCV:
+    Upstream P media=81.88 kg/cm²-g |
+    PCV setpoint media=85.00 kg/cm²-g |
+    PCV flow medio=1022.1 kg/h |
+    PCV apertura media=5.6%
+
+  Tracking SP→PV (NMAE normalizado):
+    Steam=0.11% | Purge=0.28% |
+    KOD=78.82% | 
+
+  Patrón operativo:
+    Steam alto (>70% max): 0.0% del tiempo
+    Purge cerca de mínimo (<1.2x min): 0.0% del tiempo
+
+Contribución absoluta al reward (share):
+  - Recuperación     :   0.0% (beneficio, +0.0)
+  - Flare            :  51.6% (costo, -3176.8)
+  - Combustión       :  47.3% (costo, -2913.4)
+  - Steam            :   1.0% (costo, -59.2)
+  - Purge            :   0.0% (beneficio, +0.0)
+  - Ambiental Acotado:   0.0% (beneficio, +0.0)
+  - ESD              :   0.0% (beneficio, +0.0)
+
+Variables que más influyeron en decisiones (sensibilidad local actor):
+  -  1. err_steam_norm       score=11.4391 | a[steam]=5.7950 a[purge]=1.7846 a[kod]=3.8596
+  -  2. steam_norm           score=10.7722 | a[steam]=6.2323 a[purge]=1.4262 a[kod]=3.1137
+  -  3. upstream_p_norm      score=4.9745 | a[steam]=0.4214 a[purge]=1.8545 a[kod]=2.6986
+  -  4. err_purge_norm       score=4.5933 | a[steam]=0.7150 a[purge]=1.9197 a[kod]=1.9586
+  -  5. flow_in_norm         score=4.2180 | a[steam]=1.7749 a[purge]=1.1149 a[kod]=1.3281
+  -  6. h2s_norm             score=2.7968 | a[steam]=0.1919 a[purge]=0.5605 a[kod]=2.0444
+  -  7. header_temp_norm     score=2.6533 | a[steam]=0.3449 a[purge]=0.8380 a[kod]=1.4704
+  -  8. ko_level             score=2.3595 | a[steam]=0.3963 a[purge]=0.6590 a[kod]=1.3042
+
+PROYECCIÓN DE DESPLIEGUE (determinista, 60 episodios)
+  Reward  mean=1653.0 | p50=1796.2 | p95=2718.3
+  CE      mean=0.950 | p50=0.951 | p95=0.962
+  CO₂eq t mean=412.81 | p50=283.05 | p95=1078.91
+  Flared  mean=54347.5 kg | p95=130741.2 kg
+  ESD rate=0.00% | Episodios sin ESD=100.00%
+
+COMPARACIÓN CONTRA CRITERIOS AMBIENTALES Y DE SEGURIDAD
+  ✅ CUMPLE    | 40 CFR 60.18       | Objetivo   99.0% | Resultado   99.9% | NHV en zona de combustión >= 200 BTU/scf (cuando hay flare)
+  ❌ NO CUMPLE | Objetivo operacional | Objetivo   95.0% | Resultado    7.4% | Eficiencia de combustión >= 98% (cuando hay flare)
+  ✅ CUMPLE    | Seguridad de proceso | Objetivo  100.0% | Resultado  100.0% | Purge gas >= mínimo de diseño en todo momento
+  ✅ CUMPLE    | BD-136001          | Objetivo   95.0% | Resultado   97.6% | Presión de operación dentro de rango normal (<= 0.7 barg)
+  ✅ CUMPLE    | BD-136001          | Objetivo  100.0% | Resultado  100.0% | Presión por debajo de diseño (<= 3.5 barg)
+  ✅ CUMPLE    | Decreto 351/79     | Objetivo   99.0% | Resultado  100.0% | Ruido por debajo de umbral de emergencia (<= 115 dB)
+  ⚠️ BORDE    | Decreto 351/79     | Objetivo   90.0% | Resultado   89.4% | Ruido en banda normal (<= 85 dB)
+  ✅ CUMPLE    | Especificación interna | Objetivo   99.0% | Resultado  100.0% | Concentración H₂S <= 4 mg/Nm³
+  ✅ CUMPLE    | Seguridad de proceso | Objetivo   99.0% | Resultado  100.0% | Episodios sin ESD
+  ✅ CUMPLE    | Operación PCV      | Objetivo  100.0% | Resultado  100.0% | PCV setpoint dentro de rango operativo [80, 92] kg/cm²-g
+  ⚠️ BORDE    | Operación normal   | Objetivo   99.0% | Resultado   97.9% | PSV cerrada en operación normal (sin alivio de emergencia)
+
+CONCLUSIÓN
+  El agente optimiza los flujos base SIN cambiar equipos para minimizar la penalidad ambiental.
+  La mejora viene de optimizar el ratio steam/gas para maximizar CE.
+  En despliegue, el cumplimiento normativo debe leerse sobre porcentajes de tiempo (no solo un episodio).
+
+NOTAS
+  - La comparación normativa es contra criterios representados en el modelo (proxy de compliance).
+  - h2s_gas_conc (concentración en gas) se estima desde observación normalizada (h2s_norm * H2S_MAX_MGNM3).
+  - upstream_p_norm se normaliza como (upstream_p - 70) / (99 - 70).
+  - Este reporte no reemplaza validación regulatoria en planta ni auditoría HSE.
+
+ARCHIVOS
+  results/results_flare_env2_v5_nofgrs/training_curves.png
+  results/results_flare_env2_v5_nofgrs/sac_vs_conservative.png
+  results/results_flare_env2_v5_nofgrs/sac_env2_v5_nofgrs_model.safetensors
+  results/results_flare_env2_v5_nofgrs/report.txt
+======================================================================
